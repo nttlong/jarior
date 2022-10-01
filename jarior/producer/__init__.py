@@ -1,3 +1,4 @@
+import json
 import logging
 
 __msg_folder__: str = None
@@ -11,10 +12,10 @@ import threading
 
 
 def __get_all_files__(p_dir: str):
-    ret = []
-    for x in os.walk(p_dir):
-        if os.path.isfile(x):
-            ret += [x]
+    ret=[]
+    for path, subdirs, files in os.walk(p_dir):
+        for name in files:
+            ret+=[os.path.join(path, name)]
     return ret
 
 
@@ -29,7 +30,7 @@ def __get_age_of_file_in_minutes__(file_path):
 
 
 def __thead_clean_up__(logger: logging.Logger = None):
-    def run():
+    def run(logs):
         try:
             global __msg_folder__
             global __age_of_msg__
@@ -37,9 +38,12 @@ def __thead_clean_up__(logger: logging.Logger = None):
             for file in files:
                 age = __get_age_of_file_in_minutes__(file)
                 if age > __age_of_msg__:
-                    os.remove(file)
-                    if isinstance(logger, logging.Logger):
-                        logger.info(f"Delete {file}")
+                    try:
+                        os.remove(file)
+                        if isinstance(logs, logging.Logger):
+                            logs.info(f"Delete {file}")
+                    except Exception as e:
+                        logger.debug(e)
         except Exception as e:
             if isinstance(logger, logging.Logger):
                 logger.debug(e)
@@ -48,9 +52,9 @@ def __thead_clean_up__(logger: logging.Logger = None):
     try:
         if isinstance(logger, logging.Logger):
             logger.info(f"Clean up start any file older than {__age_of_msg__} minutes will be deleted")
-        threading.Thread(target=run, args=()).start()
+        threading.Thread(target=run, args=(logger,)).start()
         if isinstance(logger, logging.Logger):
-            logger.info(f"Clean up start any file older than {__age_of_msg__} minutes will be deleted")
+            logger.info(f"Clean up start")
     except Exception as e:
         if isinstance(logger, logging.Logger):
             logger.debug(e)
@@ -70,16 +74,53 @@ def config(
     :param logger:
     :return:
     """
-    global __msg_folder__
-    global __file_folder__
+    try:
+        global __msg_folder__
+        global __file_folder__
+        global __logger__
+        global __age_of_msg__
+        __msg_folder__ = msg_folder
+        __file_folder__ = file_folder
+        __age_of_msg__ = age_of_msg_in_minutes
+        __logger__ = logger
+        if not os.path.isdir(__msg_folder__):
+            os.makedirs(__msg_folder__)
+        if not os.path.isdir(__file_folder__):
+            os.makedirs(__file_folder__)
+        __thead_clean_up__(logger)
+    except Exception as e:
+        if isinstance(logger,logging.Logger):
+            logger.debug(e)
+        else:
+            raise e
+    return None
+
+
+def commit(msg_id:str,msg_type:str, info:dict, files_path):
     global __logger__
-    global __age_of_msg__
-    __msg_folder__ = msg_folder
-    __file_folder__ = file_folder
-    __age_of_msg__ = age_of_msg_in_minutes
-    __logger__ = logger
-    if not os.path.isdir(__msg_folder__):
-        os.makedirs(__msg_folder__)
-    if not os.path.isdir(__file_folder__):
-        os.makedirs(__file_folder__)
+    def runner():
+        global __msg_folder__
+        global __logger__
+        try:
+            full_info= dict(
+                info=info,
+                file_paths=files_path
+            )
+            full_msg=os.path.join(__msg_folder__,f"{msg_id}.{msg_type}.json")
+            str_content=json.dumps(full_info)
+            with open(full_msg,"w") as fs:
+                fs.write(str_content)
+        except Exception as e:
+            if __logger__ is not None:
+                __logger__.debug(e)
+            else:
+                raise e
+    try:
+        th=threading.Thread(target=runner,args=())
+        th.start()
+    except Exception as e:
+        if __logger__ is not None:
+            __logger__.debug(e)
+        else:
+            raise e
     return None

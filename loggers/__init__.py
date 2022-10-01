@@ -1,23 +1,34 @@
 import logging
 import os.path
+import threading
+__catch__ = dict()
+__lock__ = threading.Lock()
+
+
 
 
 def get_logger(logger_name:str, logger_dir:str)-> logging.Logger:
-    # create logger for prd_ci
-    log = logging.getLogger(logger_name)
-    log.setLevel(level=logging.INFO)
+    global __lock__
+    global __catch__
+    if __catch__.get(logger_name) is not None:
+        return __catch__.get(logger_name)
+    __lock__.acquire()
+    try:
+        # create logger for prd_ci
+        log = logging.Logger(logger_name)
+        # log.setLevel(level=logging.INFO)
 
-    # create formatter and add it to the handlers
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    full_log_dir= os.path.join(logger_dir,logger_name)
-    if not os.path.isdir(full_log_dir):
-        os.makedirs(full_log_dir)
-    full_log_file = os.path.join(full_log_dir,"log.txt")
-    fh = logging.FileHandler(full_log_file)
-    fh.setLevel(level=logging.DEBUG)
-    fh.setFormatter(formatter)
+        # create formatter and add it to the handlers
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        full_log_dir= os.path.join(logger_dir,"logs",logger_name)
+        if not os.path.isdir(full_log_dir):
+            os.makedirs(full_log_dir)
 
+        info_handler = logging.FileHandler(os.path.join(full_log_dir,"log.txt"))
+        info_handler.setFormatter(formatter)
 
-    log.addHandler(fh)
-
-    return log
+        log.addHandler(info_handler)
+        __catch__[logger_name]=log
+        return log
+    finally:
+        __lock__.release()
